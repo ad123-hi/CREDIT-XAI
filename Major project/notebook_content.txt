@@ -1,0 +1,633 @@
+=== Cell 0 (markdown) ===
+## 1. Problem ##
+========================================
+
+=== Cell 1 (markdown) ===
+- Data for loans from 2007 to 2017Q3 from Lending Club in Kaggle.
+- The goal is to predict the probability that a loan will default.
+- Label 'charged_off' (a debt that a creditor has given up trying to collect on after a borrower has missed payments for several months) : Processing from loan_status variable. 
+- 'charged_off: 1 means charge off and 0 means otherwise. This is also unbalanced dataset
+
+**=> Problem to be solved: A binary classifier with unbalanced dataset**
+
+
+========================================
+
+=== Cell 2 (markdown) ===
+## 2. Loading packages and data ##
+========================================
+
+=== Cell 3 (code) ===
+import pandas as pd
+import numpy as np
+from matplotlib import pyplot as plt
+import seaborn as sns
+
+from sklearn.preprocessing import LabelEncoder
+from sklearn.model_selection import train_test_split, KFold, cross_val_score, GridSearchCV
+
+from sklearn.linear_model import LogisticRegression
+from sklearn.tree import DecisionTreeClassifier
+from sklearn.neighbors import KNeighborsClassifier
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.neural_network import MLPClassifier
+from sklearn.pipeline import Pipeline
+from sklearn.ensemble import AdaBoostClassifier, GradientBoostingClassifier
+from sklearn.ensemble import RandomForestClassifier, ExtraTreesClassifier
+from sklearn.metrics import classification_report, confusion_matrix,accuracy_score
+========================================
+
+=== Cell 4 (code) ===
+# Load data
+dataset = pd.read_csv('accepted_2007_to_2018Q4.csv.gz',\
+                      compression='gzip', encoding='utf-8') 
+========================================
+
+=== Cell 5 (code) ===
+dataset.shape
+========================================
+
+=== Cell 6 (code) ===
+pd.set_option("display.max_rows", None, "display.max_columns", None)
+dataset.head(2)
+========================================
+
+=== Cell 7 (code) ===
+# backup data
+loans = dataset
+========================================
+
+=== Cell 8 (markdown) ===
+## 3. Data Preparation ##
+========================================
+
+=== Cell 9 (markdown) ===
+### 3.1. Label check ###
+========================================
+
+=== Cell 10 (code) ===
+dataset['loan_status'].value_counts()
+========================================
+
+=== Cell 11 (markdown) ===
+**Just care about Fully Paid and Charged Off status**
+========================================
+
+=== Cell 12 (code) ===
+dataset = dataset.loc[dataset['loan_status'].isin(['Fully Paid', 'Charged Off'])]
+========================================
+
+=== Cell 13 (code) ===
+dataset['loan_status'].value_counts(normalize=True, dropna=False)
+========================================
+
+=== Cell 14 (markdown) ===
+**We have unbalanced dataset**
+========================================
+
+=== Cell 15 (code) ===
+# Create new binary column: Full Paid as 0 and Charged Off as 1
+dataset['charged_off'] = (dataset['loan_status'] == 'Charged Off').apply(np.uint8)
+dataset.drop('loan_status', axis=1, inplace=True)
+========================================
+
+=== Cell 16 (code) ===
+dataset['charged_off'].value_counts(normalize=True, dropna=False)
+========================================
+
+=== Cell 17 (markdown) ===
+### 3.2. Feature Selection ###
+========================================
+
+=== Cell 18 (markdown) ===
+There are 150 features. The elimination features selection steps are:
+- '>'30% of missing values
+- subjective judgement
+- low correlation with label
+========================================
+
+=== Cell 19 (markdown) ===
+### Missing values ###
+========================================
+
+=== Cell 20 (code) ===
+# Sorted the number of missing values of features
+missing_fractions = dataset.isnull().mean().round(3).sort_values(ascending=False)
+missing_fractions
+========================================
+
+=== Cell 21 (code) ===
+# Take drop feature list with >30% of missing values
+drop_list = sorted(list(missing_fractions[missing_fractions > 0.3].index))
+print('Drop_list len:',len(drop_list))
+print(drop_list)
+========================================
+
+=== Cell 22 (code) ===
+# Drop feature list with >30% of missing values
+dataset.drop(labels=drop_list, axis=1, inplace=True)
+dataset.shape
+========================================
+
+=== Cell 23 (code) ===
+print(sorted(dataset.columns))
+========================================
+
+=== Cell 24 (markdown) ===
+### Based on intutiveness ###
+========================================
+
+=== Cell 25 (code) ===
+keep_list = ['charged_off','funded_amnt','addr_state', 'annual_inc', 'application_type', 'dti', 'earliest_cr_line', 'emp_length', 'emp_title', 'fico_range_high', 'fico_range_low', 'grade', 'home_ownership', 'id', 'initial_list_status', 'installment', 'int_rate', 'loan_amnt', 'loan_status', 'mort_acc', 'open_acc', 'pub_rec', 'pub_rec_bankruptcies', 'purpose', 'revol_bal', 'revol_util', 'sub_grade', 'term', 'title', 'total_acc', 'verification_status', 'zip_code','last_pymnt_amnt','num_actv_rev_tl', 'mo_sin_rcnt_rev_tl_op','mo_sin_old_rev_tl_op',"bc_util","bc_open_to_buy","avg_cur_bal","acc_open_past_24mths" ]
+len(keep_list)
+========================================
+
+=== Cell 26 (code) ===
+drop_list = [col for col in dataset.columns if col not in keep_list]
+========================================
+
+=== Cell 27 (code) ===
+dataset.drop(labels=drop_list, axis=1, inplace=True)
+dataset.shape
+========================================
+
+=== Cell 28 (markdown) ===
+### Correlations ###
+========================================
+
+=== Cell 29 (markdown) ===
+Drop features with < 0.03 in corr with label.
+========================================
+
+=== Cell 30 (code) ===
+correlations = dataset.corr()
+========================================
+
+=== Cell 31 (code) ===
+corr_charged_off = abs(correlations['charged_off']).sort_values(ascending=False)
+corr_charged_off
+========================================
+
+=== Cell 32 (code) ===
+drop_list = sorted(list(corr_charged_off[corr_charged_off < 0.03].index))
+drop_list
+========================================
+
+=== Cell 33 (code) ===
+# Drop feature with less then 0.03 in corr. with labels
+dataset.drop(labels=drop_list, axis=1, inplace=True)
+dataset.shape
+========================================
+
+=== Cell 34 (markdown) ===
+## 4. Exploratory analysis ##
+========================================
+
+=== Cell 35 (code) ===
+dataset.describe(include='all')
+========================================
+
+=== Cell 36 (markdown) ===
+### 4.1. Categorical Features ###
+========================================
+
+=== Cell 37 (code) ===
+dataset[['id','emp_title','title','zip_code']].describe()
+========================================
+
+=== Cell 38 (code) ===
+# Drop ['id','emp_title','title','zip_code'] bc much unique values
+dataset.drop(labels=['id','emp_title','title','zip_code'], axis=1, inplace=True)
+========================================
+
+=== Cell 39 (code) ===
+dataset.shape
+========================================
+
+=== Cell 40 (markdown) ===
+### Feature- Term ###
+========================================
+
+=== Cell 41 (markdown) ===
+It is: "The number of payments on the loan. Values are in months and can be either 36 or 60".
+
+So, converting it to int.
+========================================
+
+=== Cell 42 (code) ===
+# Check 'term' unique
+dataset['term'].unique()
+========================================
+
+=== Cell 43 (code) ===
+# Conver 'term' into integer
+dataset['term'] = dataset['term'].apply(lambda s: np.int8(s.split()[0]))
+========================================
+
+=== Cell 44 (code) ===
+print(dataset['term'].unique())
+print(dataset['term'].dtype)
+========================================
+
+=== Cell 45 (code) ===
+dataset.groupby('term')['charged_off'].value_counts(normalize=True)
+========================================
+
+=== Cell 46 (markdown) ===
+**The number of charged-off loans in 60-month periods are more than twice to the one with 36-month periods**
+========================================
+
+=== Cell 47 (markdown) ===
+### Feature- Employement Length ### 
+========================================
+
+=== Cell 48 (code) ===
+# Check 'emp_length' unique
+dataset['emp_length'].unique()
+========================================
+
+=== Cell 49 (code) ===
+# Change format of '10+ years' and '< 1 year'
+dataset['emp_length'].replace(to_replace='10+ years', value='10 years', inplace=True)
+dataset['emp_length'].replace(to_replace='< 1 year', value='0 years', inplace=True)
+dataset['emp_length'].value_counts(dropna=False)
+
+========================================
+
+=== Cell 50 (code) ===
+# Conver 'emp_length' into integer
+def em_length_to_int(s):
+    if pd.isna(s):
+        return s
+    else:
+        return np.int8(s.split()[0])
+========================================
+
+=== Cell 51 (code) ===
+dataset['emp_length'] = dataset['emp_length'].apply(em_length_to_int)
+========================================
+
+=== Cell 52 (code) ===
+dataset['emp_length'].value_counts(dropna=False).sort_index()
+========================================
+
+=== Cell 53 (code) ===
+# Count 'emp_length' by 'charged_off'=1
+charged_off_emp_length = dataset.groupby('emp_length')['charged_off'].value_counts(normalize=True).loc[:,1]
+========================================
+
+=== Cell 54 (code) ===
+# Relation of charged_off and emp_length
+plt.bar(x=charged_off_emp_length.index, height=charged_off_emp_length.values)
+plt.title('charged_off and emp_length')
+plt.grid()
+plt.show()
+========================================
+
+=== Cell 55 (markdown) ===
+**Not much vary, so dropping 'emp_length' feature.**
+========================================
+
+=== Cell 56 (code) ===
+dataset.drop(labels=['emp_length'], axis=1, inplace=True)
+========================================
+
+=== Cell 57 (code) ===
+dataset.shape
+========================================
+
+=== Cell 58 (markdown) ===
+### Feature - Subgrade ### 
+========================================
+
+=== Cell 59 (code) ===
+# Check 'sub_grade' unique
+dataset['sub_grade'].unique()
+========================================
+
+=== Cell 60 (code) ===
+# Count 'sub_grade' by 'charged_off'=1
+charged_off_sub_grade = dataset.groupby('sub_grade')['charged_off'].value_counts(normalize=True).loc[:,1]
+
+# Relation of sub_grade and emp_length
+fig = plt.figure(figsize=(10,4))
+plt.bar(x=charged_off_sub_grade.index, height=charged_off_sub_grade.values)
+
+plt.title ('sub_grade and emp_length')
+plt.grid()
+plt.show()
+========================================
+
+=== Cell 61 (markdown) ===
+**There is a clear trend between sub_grade and emp_length**
+========================================
+
+=== Cell 62 (code) ===
+# The month the borrower’s earliest reported credit line was opened
+dataset['earliest_cr_line'].unique()
+dataset['earliest_cr_line'] = dataset['earliest_cr_line'].apply(lambda s: int(s[-4:]))
+========================================
+
+=== Cell 63 (markdown) ===
+### 4.2. Continuous features ###
+========================================
+
+=== Cell 64 (markdown) ===
+### Feature - Annual Income ###
+========================================
+
+=== Cell 65 (code) ===
+print(dataset[['annual_inc']].describe())
+
+dataset['annual_inc'].plot.density()
+plt.show()
+========================================
+
+=== Cell 66 (markdown) ===
+It has large range from: 0 to 10,999,200 with Mean =  76,247. Median = 65,000.
+========================================
+
+=== Cell 67 (code) ===
+# Take a log transform 'annual_inc'
+dataset['log_annual_inc'] = dataset['annual_inc'].apply(lambda x:np.log10(1+x))
+
+dataset['log_annual_inc'].plot.density()
+plt.show()
+========================================
+
+=== Cell 68 (code) ===
+dataset.drop(labels=['annual_inc'], axis=1, inplace=True)
+========================================
+
+=== Cell 69 (markdown) ===
+### Feature - FICO Scores ###
+========================================
+
+=== Cell 70 (code) ===
+print(dataset['fico_range_low'].unique())
+print(dataset['fico_range_high'].unique())
+print()
+========================================
+
+=== Cell 71 (code) ===
+# CORRELATION of 'fico_range_low' and'fico_range_high'
+dataset[['fico_range_low','fico_range_high']].corr()
+========================================
+
+=== Cell 72 (markdown) ===
+**Correlation high so keep 1 feature which averges of 2 FICO features**
+========================================
+
+=== Cell 73 (code) ===
+dataset['fico_score'] = 0.5*dataset['fico_range_low'] + 0.5*dataset['fico_range_high']
+dataset.drop(labels=['fico_range_high', 'fico_range_low'], axis=1, inplace=True)
+========================================
+
+=== Cell 74 (markdown) ===
+### 4.3 Encoding Categorical Data ###
+========================================
+
+=== Cell 75 (code) ===
+# Take categorical columns
+categorical_feature_mask = dataset.dtypes==object
+categorical_cols = dataset.columns[categorical_feature_mask].tolist()
+categorical_cols
+========================================
+
+=== Cell 76 (code) ===
+# Apply LabelEncoders
+dataset[categorical_cols] = dataset[categorical_cols].apply(lambda cols: LabelEncoder().fit_transform(cols))
+dataset[categorical_cols][:3]
+========================================
+
+=== Cell 77 (code) ===
+dataset.columns
+========================================
+
+=== Cell 78 (markdown) ===
+### 4.4. Sampling Data ### 
+========================================
+
+=== Cell 79 (code) ===
+dataset['charged_off'].value_counts()
+========================================
+
+=== Cell 80 (code) ===
+# Set number of sampling
+n_sampling = 10000
+
+loanstatus_0 = dataset[dataset["charged_off"]==0]
+loanstatus_1 = dataset[dataset["charged_off"]==1]
+
+subset_loanstatus_0 = loanstatus_0.sample(n=n_sampling, random_state=42)
+subset_loanstatus_1 = loanstatus_1.sample(n=n_sampling, random_state=42)
+
+print('subset_loanstatus_0:', subset_loanstatus_0.shape)
+print('subset_loanstatus_1:', subset_loanstatus_1.shape)
+========================================
+
+=== Cell 81 (code) ===
+# New balanced dataset
+dataset_sampling = pd.concat([subset_loanstatus_1, subset_loanstatus_0])
+
+# Shuffle balanced dataset
+dataset_sampling = dataset_sampling.sample(frac=1, random_state=42).reset_index(drop=True)
+
+print ('dataset_sampling shape:', dataset_sampling.shape)
+dataset_sampling[:3]
+========================================
+
+=== Cell 82 (code) ===
+dataset_sampling['charged_off'].value_counts()
+========================================
+
+=== Cell 83 (code) ===
+# Apply Mean of column to Na 
+dataset_sampling.fillna(dataset_sampling.mean(),inplace = True)
+========================================
+
+=== Cell 84 (markdown) ===
+## 5. Modeling ## 
+========================================
+
+=== Cell 85 (markdown) ===
+### 5.1. Train Test Split ### 
+========================================
+
+=== Cell 86 (code) ===
+Y = dataset_sampling['charged_off']
+X = dataset_sampling.loc[:, dataset_sampling.columns != 'charged_off']
+========================================
+
+=== Cell 87 (code) ===
+# Split dataset 0.8-0.2 ratio
+validation_size = 0.2 
+seed=7
+X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=validation_size, random_state=seed)
+========================================
+
+=== Cell 88 (code) ===
+print('X_train shape:',X_train.shape)
+print('X_test shape:',X_test.shape)
+========================================
+
+=== Cell 89 (markdown) ===
+### 5.3. Compare Models and Algorithms ### 
+========================================
+
+=== Cell 90 (code) ===
+# Set hyperparams
+num_folds = 10
+seed = 7
+scoring = 'roc_auc' 
+# (how much the model is capable of distinguishing between classes)
+========================================
+
+=== Cell 91 (markdown) ===
+### MODELS ###
+========================================
+
+=== Cell 92 (code) ===
+# spot check the algorithms
+models = []
+models.append(('LR', LogisticRegression()))
+models.append(('LDA', LinearDiscriminantAnalysis()))
+models.append(('KNN', KNeighborsClassifier()))
+models.append(('CART', DecisionTreeClassifier()))
+# Neural Network
+models.append(('NN', MLPClassifier()))
+# Ensable Models 
+# -- Boosting methods
+models.append(('AB', AdaBoostClassifier()))
+models.append(('GBM', GradientBoostingClassifier()))
+# -- Bagging methods
+models.append(('RF', RandomForestClassifier()))
+models.append(('ET', ExtraTreesClassifier()))
+========================================
+
+=== Cell 93 (markdown) ===
+### K-FOLD CROSS VALIDATION ###
+========================================
+
+=== Cell 94 (code) ===
+results = []
+names = []
+for name, model in models:
+    kfold = KFold(n_splits=num_folds, shuffle=True, random_state=seed)
+    cv_results = cross_val_score(model, X_train, Y_train, cv=kfold, scoring=scoring)
+    results.append(cv_results)
+    names.append(name)
+    msg = (name, cv_results.mean(), cv_results.std())
+    print(msg)
+========================================
+
+=== Cell 95 (markdown) ===
+### ALGORITHM COMPARISON ###
+========================================
+
+=== Cell 96 (code) ===
+fig = plt.figure(figsize=(13,6))
+ax = fig.add_subplot(111)
+
+plt.boxplot(results)
+ax.set_xticklabels(names)
+
+plt.title('Algorithm Comparision')
+plt.grid()
+plt.show()
+========================================
+
+=== Cell 97 (markdown) ===
+***From the result above, choose GBM it for grid research**
+========================================
+
+=== Cell 98 (markdown) ===
+## 6. Model Tuning and Grid Search ## 
+========================================
+
+=== Cell 99 (code) ===
+# Grid Search
+n_estimators = [20,180, 250]
+max_depth = [2, 3, 5]
+
+param_grid = dict(n_estimators=n_estimators, max_depth=max_depth)
+model = GradientBoostingClassifier()
+kfold = KFold(n_splits=num_folds, shuffle=True, random_state=seed)
+
+grid = GridSearchCV(estimator=model, param_grid=param_grid, scoring=scoring, cv=kfold)
+grid_result = grid.fit(X_train, Y_train)
+========================================
+
+=== Cell 100 (code) ===
+# Results
+print('Best: %f a and %s' % (grid_result.best_score_, grid_result.best_params_))
+means = grid_result.cv_results_['mean_test_score']
+stds = grid_result.cv_results_['std_test_score']
+params = grid_result.cv_results_['params']
+ranks = grid_result.cv_results_['rank_test_score']
+
+for mean, std, param, rank in zip(means, stds, params, ranks):
+    print("#%d %f (%f) with: %r" % (rank, mean, std, param))
+========================================
+
+=== Cell 101 (code) ===
+# Take params
+params_max_depth = grid_result.best_params_['max_depth']
+params_n_estimators = grid_result.best_params_['n_estimators']
+========================================
+
+=== Cell 102 (markdown) ===
+## 7. Finalise the Model ##
+========================================
+
+=== Cell 103 (markdown) ===
+### 7.1. Check on TEST dataset ###
+========================================
+
+=== Cell 104 (code) ===
+# Prepare model
+model = GradientBoostingClassifier(max_depth=params_max_depth, n_estimators=params_n_estimators)
+model.fit(X_train, Y_train)
+========================================
+
+=== Cell 105 (code) ===
+# Accuracy on TEST dataset
+predictions = model.predict(X_test)
+print('ACCURACY_SCORE on TEST set:', accuracy_score(Y_test, predictions))
+print(confusion_matrix(Y_test, predictions))
+print(classification_report(Y_test, predictions))
+========================================
+
+=== Cell 106 (code) ===
+# Heatmap
+df_cm = pd.DataFrame(confusion_matrix(Y_test, predictions), columns=np.unique(Y_test),\
+                     index = np.unique(Y_test))
+df_cm.index.name = 'Actual'
+df_cm.columns.name = 'Predicted'
+sns.heatmap(df_cm, cmap="Blues", fmt='.4g', annot=True,annot_kws={"size": 16})# font size
+========================================
+
+=== Cell 107 (markdown) ===
+***The model is quite good.***
+========================================
+
+=== Cell 108 (markdown) ===
+### 7.2. Feature Importance ###
+========================================
+
+=== Cell 109 (code) ===
+model.feature_importances_
+========================================
+
+=== Cell 110 (code) ===
+print(model.feature_importances_) #use inbuilt class feature_importances of tree based classifiers
+#plot graph of feature importances for better visualization
+feat_importances = pd.Series(model.feature_importances_, index=X.columns)
+feat_importances.nlargest(10).plot(kind='barh')
+plt.show()
+========================================
+
+=== Cell 111 (markdown) ===
+ GBM model helps to show the most important feature for this prediction is: 'last_pymnt_amnt'
+========================================
+

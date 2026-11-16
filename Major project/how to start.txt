@@ -1,0 +1,5 @@
+powershell command: 
+powershell -ExecutionPolicy Bypass -File .\start_app.ps1
+
+how to turn off the backend : 
+taskkill /f /im python.exe
