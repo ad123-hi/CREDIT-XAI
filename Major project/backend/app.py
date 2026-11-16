@@ -76,15 +76,13 @@ def health_check():
         model_loaded=model_loaded,
         version="1.0.0"
     )
-uvicorn.run(
-    "app:app",
-    host="0.0.0.0",
-    port=int(os.environ.get("PORT", "8000")),
-    reload=False,
-)
-
 # Include prediction router
 app.include_router(predict_router, tags=["Predictions & Explanations"])
 
 if __name__ == "__main__":
-    uvicorn.run("app:app", host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(
+        "app:app",
+        host="0.0.0.0",
+        port=int(os.environ.get("PORT", "8000")),
+        reload=False,
+    )
